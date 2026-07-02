@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.env
+.DS_Store
+*.log
+coverage/
+
+# IDE and agent files
+.agents/
+.vscode/
+.idea/
+
+# Assessment documentation and instructions
+FAQ_Senior_Technical_Architect_Take-Home_Assessment.pdf
+JD_Senior Technical Architect & Engineering Lead.pdf
+gridwatch-csms-stubs 1.md
+gridwatch-reference-architecture-DRAFT 1.md
+gridwatch-takehome-candidate-brief 2.md
