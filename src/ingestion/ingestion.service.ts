@@ -1,13 +1,14 @@
 import { Injectable } from "@nestjs/common";
 import { PoolClient } from "pg";
 import { DatabaseService } from "../db/database.service";
+import { RedisService } from "../redis/redis.service";
 import { IngestBatchInput, IngestSummary, NormalizedEvent, NormalizedSessionEvent } from "../types";
 import { computeSettlement, Tariff } from "../settlement/settlement";
 import { normalizeVendorEvent } from "./event-normalizer";
 
 @Injectable()
 export class IngestionService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(private readonly db: DatabaseService, private readonly redisService: RedisService) {}
 
   async ingestBatch(input: IngestBatchInput): Promise<IngestSummary> {
     const summary: IngestSummary = {
@@ -109,6 +110,16 @@ export class IngestionService {
   ): Promise<void> {
     const result = await client.query(
       `
+        WITH op AS (
+          SELECT s.operator_id
+          FROM chargers c
+          JOIN sites s ON s.site_id = c.site_id
+          WHERE c.charger_id = $1
+        ),
+        inserted_ts AS (
+          INSERT INTO connector_status_events (operator_id, charger_id, connector_id, ts, status)
+          SELECT operator_id, $1, $2, $4, $3 FROM op
+        )
         UPDATE connectors
         SET status = $3, status_ts = $4, updated_at = now()
         WHERE charger_id = $1
@@ -120,6 +131,8 @@ export class IngestionService {
 
     if (result.rowCount === 0) {
       await this.assertConnectorExists(client, chargerId, connectorId);
+    } else {
+      await this.redisService.cacheConnectorState(chargerId, connectorId, { status, status_ts: vendorTs });
     }
   }
 
@@ -133,6 +146,16 @@ export class IngestionService {
   ): Promise<void> {
     const result = await client.query(
       `
+        WITH op AS (
+          SELECT s.operator_id
+          FROM chargers c
+          JOIN sites s ON s.site_id = c.site_id
+          WHERE c.charger_id = $1
+        ),
+        inserted_ts AS (
+          INSERT INTO connector_meter_values (operator_id, charger_id, connector_id, ts, energy_register_wh, power_w)
+          SELECT operator_id, $1, $2, $5, $3, $4 FROM op
+        )
         UPDATE connectors
         SET
           energy_register_wh = $3,
@@ -148,6 +171,8 @@ export class IngestionService {
 
     if (result.rowCount === 0) {
       await this.assertConnectorExists(client, chargerId, connectorId);
+    } else {
+      await this.redisService.cacheConnectorState(chargerId, connectorId, { energyRegisterWh, powerW, meter_ts: vendorTs });
     }
   }
 

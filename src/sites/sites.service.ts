@@ -1,10 +1,50 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from "@nestjs/common";
 import { DatabaseService } from "../db/database.service";
 import { isPostgisEnabled } from "../db/postgis";
 
 @Injectable()
-export class SitesService {
+export class SitesService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(SitesService.name);
+  private geocodeInterval?: NodeJS.Timeout;
+
   constructor(private readonly db: DatabaseService) {}
+
+  onModuleInit() {
+    this.geocodeInterval = setInterval(() => this.processGeocoding(), 10000); // 10s
+  }
+
+  onModuleDestroy() {
+    if (this.geocodeInterval) clearInterval(this.geocodeInterval);
+  }
+
+  private async processGeocoding() {
+    const result = await this.db.query(
+      `SELECT site_id, address FROM sites WHERE geocode_status = 'unresolved' LIMIT 1`
+    );
+    if (result.rowCount === 0) return;
+    
+    const site = result.rows[0];
+    try {
+      const q = encodeURIComponent(site.address);
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`, {
+        headers: { "User-Agent": "Cidroy-Gridwatch/1.0" }
+      });
+      const data = (await res.json()) as any[];
+      if (data && data.length > 0) {
+        const { lat, lon } = data[0];
+        await this.db.query(
+          `UPDATE sites SET lat = $1, lng = $2, geocode_status = 'resolved' WHERE site_id = $3`,
+          [lat, lon, site.site_id]
+        );
+        this.logger.log(`Geocoded site ${site.site_id}: ${lat}, ${lon}`);
+      } else {
+        await this.db.query(`UPDATE sites SET geocode_status = 'failed' WHERE site_id = $1`, [site.site_id]);
+        this.logger.warn(`Failed to geocode site ${site.site_id}: no results`);
+      }
+    } catch (err) {
+      this.logger.error(`Error geocoding site ${site.site_id}`, err);
+    }
+  }
 
   async statusRollup(operatorId: string) {
     const result = await this.db.query(

@@ -206,3 +206,15 @@ Dashboards should show P50/P95/P99/P99.9 by signal type and tenant. Alerts shoul
 - A polished frontend. The FAQ says backend correctness is more important.
 - Full tariff complexity. I would start with per-CPO kWh price plus session fee, then extend.
 - Real-time density recomputation on every telemetry event. Density changes with inventory/geography, not every meter reading.
+
+## Part C - Implementation Details
+
+The theoretical architecture described above has been actively implemented as the "Hardest Slice" of the assessment. 
+
+Key implementation highlights include:
+- **Event-Driven Ingestion**: The `IngestionController` acts as a Kafka producer, publishing raw CSMS webhooks and poll events to a `telemetry-raw` topic (powered by Redpanda).
+- **Time-Series Storage**: Telemetry is routed and stored in **TimescaleDB** hypertables for optimized high-volume history.
+- **Geospatial Processing**: A background **GeocodingWorker** asynchronously uses Nominatim to enrich vendor address data with exact coordinates, storing them in **PostGIS** as `geography(Point,4326)` for ST_Distance nearest-neighbor queries.
+- **Real-time Live State**: Connector state is cached and pushed to clients in real-time via **WebSockets (Socket.io)** and **Redis**.
+- **Multi-Tenant Security**: Full OIDC integration using **Keycloak**. The API strictly extracts the `operator_id` from the decoded JWT claims instead of trusting client query parameters, ensuring absolute data isolation per tenant.
+- **Modern Frontend**: The legacy vanilla JS dashboard has been replaced with a reactive **React + Vite** application that transparently manages Keycloak authentication and state updates.

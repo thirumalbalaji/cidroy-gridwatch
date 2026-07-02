@@ -104,3 +104,20 @@ CREATE TABLE IF NOT EXISTS poll_state (
   last_success_at timestamptz,
   next_allowed_poll_at timestamptz
 );
+
+CREATE TABLE IF NOT EXISTS connector_meter_values (
+  operator_id text NOT NULL,
+  charger_id text NOT NULL,
+  connector_id text NOT NULL,
+  ts timestamptz NOT NULL,
+  energy_register_wh bigint,
+  power_w integer
+);
+
+CREATE TABLE IF NOT EXISTS connector_status_events (
+  operator_id text NOT NULL,
+  charger_id text NOT NULL,
+  connector_id text NOT NULL,
+  ts timestamptz NOT NULL,
+  status text NOT NULL
+);

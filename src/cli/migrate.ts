@@ -19,6 +19,14 @@ async function main() {
     console.warn("postgis extension is not installed; using lat/lng fallback queries");
   }
 
+  try {
+    const timescale = await readFile("src/db/timescale.sql", "utf8");
+    await db.query(timescale);
+    console.log("timescaledb enabled");
+  } catch (err) {
+    console.warn("timescaledb extension is not installed or failed", err);
+  }
+
   await db.onModuleDestroy();
   console.log("database migrated");
 }

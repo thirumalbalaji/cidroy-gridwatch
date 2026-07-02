@@ -1,12 +1,12 @@
-import { Body, Controller, Headers, Post, UnauthorizedException } from "@nestjs/common";
+import { Body, Controller, Headers, Inject, Post, UnauthorizedException } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { IngestionService } from "./ingestion.service";
+import { ClientKafka } from "@nestjs/microservices";
 import { isValidWebhookSignature } from "./webhook-signature";
 
 @ApiTags("ingestion")
 @Controller("ingest")
 export class IngestionController {
-  constructor(private readonly ingestion: IngestionService) {}
+  constructor(@Inject("KAFKA_CLIENT") private readonly kafkaClient: ClientKafka) {}
 
   @Post("poll-page")
   @ApiOperation({ summary: "Ingest one CSMS poll API page" })
@@ -27,16 +27,18 @@ export class IngestionController {
   })
   async ingestPollPage(@Body() body: { events?: unknown[] }) {
     if (!Array.isArray(body.events)) {
-      return this.ingestion.ingestBatch({
+      this.kafkaClient.emit("telemetry-raw", {
         source: "poll",
         events: [{ type: "malformed_page", body }]
       });
+      return { status: "accepted" };
     }
 
-    return this.ingestion.ingestBatch({
+    this.kafkaClient.emit("telemetry-raw", {
       source: "poll",
       events: body.events
     });
+    return { status: "accepted" };
   }
 
   @Post("webhook")
@@ -62,10 +64,11 @@ export class IngestionController {
       throw new UnauthorizedException("invalid CSMS webhook signature");
     }
 
-    return this.ingestion.ingestBatch({
+    this.kafkaClient.emit("telemetry-raw", {
       source: "webhook",
       deliveryId: body.delivery_id,
       events: Array.isArray(body.events) ? body.events : []
     });
+    return { status: "accepted" };
   }
 }

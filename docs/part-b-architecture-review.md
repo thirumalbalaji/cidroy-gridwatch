@@ -80,3 +80,12 @@ Fix: add geocoding enrichment, confidence scoring, cache, manual correction flow
 - What geocoding provider, licensing terms, and manual override process are acceptable?
 - What is the expected tenant isolation model for internal support/admin users?
 - Are settlement records legally binding invoices or operational reconciliation estimates?
+
+## Part C - Resolution of Findings
+
+During the "Hardest Slice" implementation, the critical architectural flaws identified above were successfully addressed:
+- **Storage**: Telemetry was migrated from a single unpartitioned table to **TimescaleDB** hypertables.
+- **GIS Design**: Implemented a **GeocodingWorker** pipeline to assign coordinates and migrated to **PostGIS** `geography` types for accurate spatial calculations (e.g., `ST_Distance`).
+- **Multi-Tenant Isolation**: Eradicated the insecure query-parameter fallback by fully integrating **Keycloak**. The application strictly parses the tenant's `operator_id` natively from the OIDC JSON Web Token.
+- **At-Least-Once Delivery**: Refactored the core ingestion flow to route raw CSMS payloads directly into **Kafka** for durable event-log processing before any state updates occur.
+- **Live State Caching**: Centralized real-time socket connections and live connector states into **Redis** rather than relying purely on transient memory.
